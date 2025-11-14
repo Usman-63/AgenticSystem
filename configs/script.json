@@ -1,0 +1,21 @@
+{
+  "rag_context": {
+    "enabled": true,
+    "documents": [
+      "Store Inventory.pdf"
+    ],
+    "description": "Uploaded knowledge base documents"
+  },
+  "api_endpoints": [
+    {
+      "method": "POST",
+      "path": "/customer/submit",
+      "description": "Submit the orders"
+    },
+    {
+      "method": "GET",
+      "path": "/customer/{submission_id}",
+      "description": "Get customer Submission"
+    }
+  ]
+}

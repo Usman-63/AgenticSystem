@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agentic System - Setup</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: #2563eb;
+      color: white;
+      padding: 24px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .steps {
+      display: flex;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .step {
+      flex: 1;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+    .step.active {
+      background: white;
+      border-bottom-color: #2563eb;
+      font-weight: 600;
+    }
+    .step-number {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      line-height: 28px;
+      border-radius: 50%;
+      background: #d1d5db;
+      color: white;
+      margin-right: 8px;
+      font-size: 14px;
+    }
+    .step.active .step-number {
+      background: #2563eb;
+    }
+    .content {
+      padding: 32px;
+    }
+    .step-content {
+      display: none;
+    }
+    .step-content.active {
+      display: block;
+    }
+    .form-group {
+      margin-bottom: 24px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #374151;
+    }
+    input[type="text"],
+    input[type="email"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: #2563eb;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: monospace;
+    }
+    .slots-list {
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .slot-item {
+      display: grid;
+      grid-template-columns: 2fr 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .endpoint-item {
+      display: grid;
+      grid-template-columns: 120px 2fr 3fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+      padding: 8px 16px;
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    .btn-add {
+      background: #10b981;
+      color: white;
+      padding: 8px 16px;
+    }
+    .btn-add:hover {
+      background: #059669;
+    }
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 2px solid #e5e7eb;
+    }
+    .example {
+      background: #f3f4f6;
+      border-left: 4px solid #2563eb;
+      padding: 12px;
+      margin-top: 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: monospace;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .review-section {
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+    .review-section h3 {
+      margin-top: 0;
+      color: #2563eb;
+    }
+    .error {
+      color: #ef4444;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .success {
+      color: #10b981;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Agentic System Setup</h1>
+      <p>Configure your AI assistant in a few simple steps</p>
+    </div>
+    
+    <div class="steps">
+      <div class="step active" data-step="1">
+        <span class="step-number">1</span>
+        <span>Script</span>
+      </div>
+      <div class="step" data-step="2">
+        <span class="step-number">2</span>
+        <span>Upload Files</span>
+      </div>
+      <div class="step" data-step="3">
+        <span class="step-number">3</span>
+        <span>API Endpoints</span>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Step 1: Script Configuration -->
+      <div class="step-content active" id="step-1">
+        <h2>Script Configuration</h2>
+        
+        <div class="form-group">
+          <label>Raw Script *</label>
+          <textarea id="raw-script" placeholder="Enter your conversation flow script..." required style="min-height: 300px; font-family: monospace;"></textarea>
+          <div class="example">
+            This is the detailed script that guides the conversation flow. Include instructions, cases, and logic.
+            <br><br>
+            Example format:
+            <br>
+            Greet the customer by saying Welcome to Metro Cash n Carry
+            <br>
+            Ask him what would he like to order?
+            <br>
+            Case 1: If the customer mentions any items, check if it is mentioned in the Inventory...
+          </div>
+        </div>
+
+        <div class="actions">
+          <div></div>
+          <button class="btn-primary" onclick="saveScriptAndNext()">Save & Next: Upload Files →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Upload Files -->
+      <div class="step-content" id="step-2">
+        <h2>Upload Knowledge Base Files (Optional)</h2>
+        <p>Upload documents that will be used for RAG (Retrieval Augmented Generation)</p>
+        
+        <div class="form-group">
+          <label>Select Files</label>
+          <input type="file" id="file-input" multiple accept=".pdf,.txt,.md">
+          <button type="button" class="btn-add" onclick="uploadFiles()" style="margin-top: 12px;">Upload Selected Files</button>
+        </div>
+
+        <div id="uploaded-files" class="form-group"></div>
+
+        <div class="actions">
+          <button class="btn-secondary" onclick="prevStep(1)">← Back</button>
+          <button class="btn-primary" onclick="nextStep(3)">Next: API Endpoints →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: API Endpoints -->
+      <div class="step-content" id="step-3">
+        <h2>API Endpoints (Optional)</h2>
+        <p>Define API endpoints that the assistant can call during conversations</p>
+        
+        <div id="endpoints-list" class="form-group"></div>
+        <button type="button" class="btn-add" onclick="addEndpoint()">+ Add Endpoint</button>
+        
+        <div class="example" style="margin-top: 16px;">
+          Example: Method: POST, Path: /api/customer/submit, Description: Submit customer order
+        </div>
+
+        <div class="actions">
+          <button class="btn-secondary" onclick="prevStep(2)">← Back</button>
+          <button class="btn-primary" onclick="saveEndpointsAndFinish()">Save & Finish →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentStep = 1;
+    let uploadedFiles = [];
+    let endpoints = [];
+
+    // Check if setup already exists and load it
+    async function loadExistingConfig() {
+      try {
+        // Load raw script
+        const scriptRes = await fetch('/api/setup/raw-script');
+        if (scriptRes.ok) {
+          const scriptText = await scriptRes.text();
+          document.getElementById('raw-script').value = scriptText;
+        }
+        
+        // Load files and endpoints
+        const res = await fetch('/api/state/script');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.rag_context && data.rag_context.documents) {
+            uploadedFiles = data.rag_context.documents;
+            renderUploadedFiles();
+          }
+          
+          if (data.api_endpoints && data.api_endpoints.length > 0) {
+            endpoints = data.api_endpoints;
+            renderEndpoints();
+          }
+        }
+      } catch (e) {
+        // No existing config, start fresh
+      }
+    }
+
+    function showStep(step) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.step-content').forEach(s => s.classList.remove('active'));
+      document.querySelector(`[data-step="${step}"]`).classList.add('active');
+      document.getElementById(`step-${step}`).classList.add('active');
+      currentStep = step;
+    }
+
+    function nextStep(step) {
+      if (validateStep(currentStep)) {
+        showStep(step);
+      }
+    }
+
+    function prevStep(step) {
+      showStep(step);
+    }
+
+    function validateStep(step) {
+      if (step === 1) {
+        const rawScript = document.getElementById('raw-script').value.trim();
+        if (!rawScript) {
+          alert('Please enter the raw script');
+          return false;
+        }
+      }
+      return true;
+    }
+
+    async function saveScriptAndNext() {
+      const rawScript = document.getElementById('raw-script').value.trim();
+      if (!rawScript) {
+        alert('Please enter the raw script');
+        return;
+      }
+      
+      try {
+        // Save script immediately - preserve existing files and endpoints
+        const scriptData = {
+          rag_context: {
+            enabled: uploadedFiles.length > 0,
+            documents: uploadedFiles,
+            description: "Uploaded knowledge base documents"
+          }
+        };
+
+        const res = await fetch('/api/setup/script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            script: scriptData,
+            raw_script: rawScript
+          })
+        });
+
+        const result = await res.json();
+        if (!result.ok) {
+          throw new Error(result.error || 'Failed to save script');
+        }
+        
+        nextStep(2);
+      } catch (e) {
+        alert('Error saving script: ' + e.message);
+      }
+    }
+
+    async function saveEndpointsAndFinish() {
+      try {
+        // Save endpoints if any
+        if (endpoints.length > 0) {
+          const endpointsRes = await fetch('/api/setup/endpoints', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoints })
+          });
+          const endpointsResult = await endpointsRes.json();
+          if (!endpointsResult.ok) {
+            throw new Error(endpointsResult.error || 'Failed to save endpoints');
+          }
+        }
+
+        // Redirect to chat
+        window.location.href = '/chat.html';
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+
+    function addEndpoint() {
+      endpoints.push({ method: 'GET', path: '', description: '', payload: {} });
+      renderEndpoints();
+    }
+
+    function removeEndpoint(index) {
+      endpoints.splice(index, 1);
+      renderEndpoints();
+    }
+
+    function renderEndpoints() {
+      const container = document.getElementById('endpoints-list');
+      container.innerHTML = '';
+      endpoints.forEach((ep, index) => {
+        const div = document.createElement('div');
+        div.className = 'endpoint-item';
+        div.innerHTML = `
+          <select onchange="endpoints[${index}].method = this.value">
+            <option value="GET" ${ep.method === 'GET' ? 'selected' : ''}>GET</option>
+            <option value="POST" ${ep.method === 'POST' ? 'selected' : ''}>POST</option>
+            <option value="PUT" ${ep.method === 'PUT' ? 'selected' : ''}>PUT</option>
+            <option value="DELETE" ${ep.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
+          </select>
+          <input type="text" placeholder="/api/path" value="${ep.path}" onchange="endpoints[${index}].path = this.value">
+          <input type="text" placeholder="Description" value="${ep.description}" onchange="endpoints[${index}].description = this.value">
+          <button class="btn-danger" onclick="removeEndpoint(${index})">Remove</button>
+        `;
+        container.appendChild(div);
+
+        // Payload JSON template
+        const payloadGroup = document.createElement('div');
+        payloadGroup.className = 'form-group';
+        const label = document.createElement('label');
+        label.textContent = 'Payload (JSON template, optional)';
+        const ta = document.createElement('textarea');
+        ta.placeholder = '{\n  "example_key": "value"\n}';
+        ta.value = ep.payload && Object.keys(ep.payload).length ? JSON.stringify(ep.payload, null, 2) : '';
+        const errorEl = document.createElement('div');
+        errorEl.className = 'error';
+        ta.addEventListener('input', () => { errorEl.textContent = ''; });
+        ta.addEventListener('change', () => {
+          const val = ta.value.trim();
+          try {
+            endpoints[index].payload = val ? JSON.parse(val) : {};
+            errorEl.textContent = '';
+          } catch (e) {
+            errorEl.textContent = 'Invalid JSON';
+          }
+        });
+        payloadGroup.appendChild(label);
+        payloadGroup.appendChild(ta);
+        payloadGroup.appendChild(errorEl);
+        container.appendChild(payloadGroup);
+      });
+    }
+
+    async function uploadFiles() {
+      const input = document.getElementById('file-input');
+      if (!input.files || input.files.length === 0) {
+        alert('Please select files to upload');
+        return;
+      }
+
+      const formData = new FormData();
+      for (let i = 0; i < input.files.length; i++) {
+        formData.append('files', input.files[i]);
+      }
+
+      try {
+        const res = await fetch('/api/setup/files', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          uploadedFiles = uploadedFiles.concat(data.files);
+          renderUploadedFiles();
+          alert(`Successfully uploaded ${data.files.length} file(s)`);
+        } else {
+          alert('Upload failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Upload error: ' + e.message);
+      }
+    }
+
+    function renderUploadedFiles() {
+      const container = document.getElementById('uploaded-files');
+      if (uploadedFiles.length === 0) {
+        container.innerHTML = '<p>No files uploaded yet</p>';
+        return;
+      }
+      container.innerHTML = '<h3>Uploaded Files:</h3>';
+      uploadedFiles.forEach((file, index) => {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = `<span>${file}</span>`;
+        container.appendChild(div);
+      });
+    }
+
+
+    // Initialize
+    renderUploadedFiles();
+    loadExistingConfig();
+  </script>
+</body>
+</html>
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    }
+
