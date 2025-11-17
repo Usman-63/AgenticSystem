@@ -74,7 +74,7 @@ Get your API key from [Together AI](https://together.ai/)
 
 **Note**: The Developer API service should be deployed separately. See `DEVELOPER_API.md` for details.
 
-### 3. Run the Server
+### 4. Run the Server
 
 ```bash
 uvicorn src.server:app --reload --host 0.0.0.0 --port 8000
