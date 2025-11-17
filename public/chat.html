@@ -203,6 +203,9 @@
     let messages = [];
     let turn = 0;
     let mediaRecorder = null;
+    let audioStream = null;
+    let isPlayingAudio = false;
+    let currentAudio = null;
     let sessionId = null;
     let chunks = [];
     let asrRecorder = null;
@@ -344,11 +347,13 @@
           
           // Get audio stream
           navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            audioStream = stream; // Store stream reference for muting/unmuting
             const opts = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
             mediaRecorder = new MediaRecorder(stream, opts);
             
             mediaRecorder.ondataavailable = async (e) => {
-              if (e.data && e.data.size > 0 && webrtcWs && webrtcWs.readyState === WebSocket.OPEN) {
+              if (e.data && e.data.size > 0 && webrtcWs && webrtcWs.readyState === WebSocket.OPEN && !isPlayingAudio) {
+                // Only send audio chunks when not playing audio (prevent feedback loop)
                 // Convert blob to base64 and send via WebSocket
                 const reader = new FileReader();
                 reader.onload = () => {
@@ -402,8 +407,74 @@
               }
             } else if (msg.type === 'audio_ready' && msg.audio_path) {
               // Play TTS audio response
-              const audio = new Audio(msg.audio_path);
-              audio.play().catch(err => console.error('Audio play failed:', err));
+              // Stop any currently playing audio
+              if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+              }
+              
+              // Build audio URL with audio_file parameter if provided
+              let audioUrl = msg.audio_path;
+              if (msg.audio_file) {
+                const url = new URL(audioUrl, window.location.origin);
+                url.searchParams.set('audio_file', encodeURIComponent(msg.audio_file));
+                audioUrl = url.pathname + url.search;
+              }
+              
+              // Prevent recording during playback to avoid feedback loop
+              isPlayingAudio = true;
+              // Mute audio tracks to prevent feedback (chunks won't be sent due to isPlayingAudio check)
+              if (audioStream) {
+                audioStream.getAudioTracks().forEach(track => {
+                  track.enabled = false;
+                });
+              }
+              
+              voiceStateEl.textContent = 'Speaking…';
+              
+              const audio = new Audio(audioUrl);
+              currentAudio = audio;
+              
+              const resumeRecording = () => {
+                isPlayingAudio = false;
+                // Unmute audio tracks
+                if (audioStream) {
+                  audioStream.getAudioTracks().forEach(track => {
+                    track.enabled = true;
+                  });
+                }
+                voiceStateEl.textContent = 'Listening…';
+                currentAudio = null;
+              };
+              
+              audio.onended = () => {
+                // Resume recording after audio finishes
+                resumeRecording();
+                // Notify server that playback is complete
+                if (webrtcWs && webrtcWs.readyState === WebSocket.OPEN) {
+                  webrtcWs.send(JSON.stringify({ type: 'playback_complete' }));
+                }
+              };
+              
+              audio.onerror = (err) => {
+                console.error('Audio play failed:', err);
+                // Resume recording even on error
+                resumeRecording();
+                // Notify server that playback failed/ended
+                if (webrtcWs && webrtcWs.readyState === WebSocket.OPEN) {
+                  webrtcWs.send(JSON.stringify({ type: 'playback_complete' }));
+                }
+              };
+              
+              audio.play().catch(err => {
+                console.error('Audio play failed:', err);
+                // Resume recording on play error
+                resumeRecording();
+                // Notify server that playback failed
+                if (webrtcWs && webrtcWs.readyState === WebSocket.OPEN) {
+                  webrtcWs.send(JSON.stringify({ type: 'playback_complete' }));
+                }
+              });
             } else if (msg.type === 'error') {
               console.error('WebRTC error:', msg.error);
               voiceStateEl.textContent = 'Error';
@@ -449,9 +520,16 @@
         }
         
         // Stop audio tracks
-        if (mediaRecorder && mediaRecorder.stream) {
-          mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        if (audioStream) {
+          audioStream.getTracks().forEach(track => track.stop());
+          audioStream = null;
         }
+        // Stop any playing audio
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+        isPlayingAudio = false;
       } catch (e) {
         console.error('Error stopping voice:', e);
       } finally {

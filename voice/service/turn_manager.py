@@ -26,6 +26,7 @@ class TurnSession:
         self.last_conversion_time = 0.0
         self.segment_start_time = time.time()  # Track when segment started
         self.conversion_lock = threading.Lock()  # Prevent concurrent conversions
+        self.processing_active: bool = False  # Flag to prevent processing new chunks during processing/playback
         
         # In-memory buffers for processing (files still saved for archival)
         self.webm_buffer = bytearray()  # Accumulate webm chunks in memory
@@ -225,13 +226,22 @@ class TurnSession:
                        self.sid, old_index, self.segment_index, self.webm_path, self.wav_path)
 
 class TurnManager:
-    def __init__(self, base_dir: str, ffmpeg_bin: str, whisper_bin: str, whisper_model: str, piper_voice: str = ""):
+    def __init__(self, base_dir: str, ffmpeg_bin: str, whisper_model: str, piper_voice: str = "", 
+                 use_cuda: bool = False, whisper_bin: str = None):
         self.base = base_dir
         os.makedirs(self.base, exist_ok=True)
         self.ffmpeg_bin = ffmpeg_bin
-        self.whisper_bin = whisper_bin
         self.whisper_model = whisper_model
         self.piper_voice = piper_voice
+        self.use_cuda = use_cuda  # Enable GPU acceleration for Piper TTS and Whisper
+        # Deprecated: whisper_bin kept for backward compatibility but not used
+        if whisper_bin:
+            import logging
+            logging.getLogger(__name__).warning("whisper_bin parameter is deprecated (using faster-whisper)")
+        self.whisper_bin = whisper_bin  # Keep for backward compat
+        # Determine device and compute type for Whisper
+        self.whisper_device = "cuda" if use_cuda else "cpu"
+        self.whisper_compute_type = "float16" if use_cuda else "int8"
         self.sessions: Dict[str, TurnSession] = {}
 
     def start(self, sid: str) -> TurnSession:
@@ -241,8 +251,18 @@ class TurnManager:
 
     def get(self, sid: str) -> Optional[TurnSession]:
         return self.sessions.get(sid)
+    
+    def clear_processing_flag(self, sid: str) -> bool:
+        """Clear the processing_active flag for a session (called after playback completes)"""
+        s = self.get(sid)
+        if s:
+            s.processing_active = False
+            import logging
+            logging.getLogger(__name__).info("clear_processing_flag: sid=%s - processing_active cleared, ready for new input", sid)
+            return True
+        return False
 
-    def push_chunk(self, sid: str, data: bytes, vad_threshold: float = 0.35, min_speech_ms: int = 150, min_silence_ms: int = 500, respond: bool = False) -> Dict:
+    def push_chunk(self, sid: str, data: bytes, vad_threshold: float = 0.35, min_speech_ms: int = 150, min_silence_ms: int = 1000, respond: bool = False) -> Dict:
         """
         Buffer-based processing: Only process when silence is detected.
         Accumulates chunks and only converts/processes when silence threshold is met.
@@ -252,6 +272,14 @@ class TurnManager:
         s = self.get(sid)
         if not s:
             return {"ok": False, "error": "invalid session"}
+        
+        # Skip accumulating/processing if we're currently processing/playing back (prevent new audio from being processed)
+        if s.processing_active:
+            logger.debug("push_chunk: sid=%s segment=%d - discarding chunk (processing/playback active, chunk_count=%d)", 
+                        sid, s.segment_index, s.chunk_count)
+            # Don't accumulate chunks during processing/playback - discard them
+            # This prevents audio spoken during playback from being processed
+            return {"ok": True, "finalized": False, "state": "speaking"}
         
         # Just accumulate chunks - don't process yet
         s.append_chunk(data)
@@ -327,18 +355,27 @@ class TurnManager:
         # Only process when silence threshold is met (buffer-based approach)
         if silence * 1000 >= min_silence_ms:
             # Silence detected - process the buffered audio
-            logger.info("push_chunk: sid=%s SILENCE DETECTED - processing segment=%d", sid, s.segment_index)
+            # Set processing flag to prevent new chunks from being processed
+            s.processing_active = True
+            logger.info("push_chunk: sid=%s SILENCE DETECTED - processing segment=%d (processing_active=True)", sid, s.segment_index)
             # Transcribe using in-memory wav bytes (piped to whisper via stdin)
             if s.wav_bytes is None or len(s.wav_bytes) == 0:
                 logger.warning("push_chunk: sid=%s segment=%d - wav_bytes is None or empty, cannot transcribe", sid, s.segment_index)
                 txt = ""
             else:
                 logger.info("push_chunk: sid=%s segment=%d - transcribing wav_bytes=%d bytes", sid, s.segment_index, len(s.wav_bytes))
-                txt = transcribe_wav_bytes(self.whisper_bin, self.whisper_model, s.wav_bytes) or ""
+                txt = transcribe_wav_bytes(
+                    self.whisper_model, 
+                    s.wav_bytes,
+                    device=self.whisper_device,
+                    compute_type=self.whisper_compute_type,
+                    vad_filter=True,
+                    whisper_bin=self.whisper_bin  # For backward compat
+                ) or ""
                 logger.info("push_chunk: sid=%s segment=%d - transcription result: '%s' (len=%d)", sid, s.segment_index, txt, len(txt))
             s.transcript = txt
             s.finalized = True
-            res: Dict = {"ok": True, "finalized": True, "transcript": txt, "state": "listening"}
+            res: Dict = {"ok": True, "finalized": True, "transcript": txt, "state": "speaking"}
             logger.info("push_chunk: sid=%s segment=%d - returning finalized result: transcript='%s'", sid, s.segment_index, txt)
             
             if respond and txt:
@@ -349,14 +386,30 @@ class TurnManager:
                     reply = ""
                 res["reply"] = reply
                 if reply and self.piper_voice:
-                    out_wav = os.path.join(s.dir, "reply.wav")
-                    ok = synthesize_wav_api(self.piper_voice, reply, out_wav)
+                    # Use segment index to make filename unique (prevents browser caching old audio)
+                    out_wav = os.path.join(s.dir, f"reply_segment_{s.segment_index}.wav")
+                    ok = synthesize_wav_api(self.piper_voice, reply, out_wav, use_cuda=self.use_cuda)
                     if ok:
                         res["audio_path"] = out_wav
+                        # Estimate playback duration (roughly 150 words per minute, ~0.4s per word)
+                        # Add buffer time for safety
+                        estimated_duration = len(reply.split()) * 0.4 + 1.0
+                        res["playback_duration"] = estimated_duration
+                else:
+                    # No audio to play - clear processing flag immediately
+                    s.processing_active = False
+                    logger.info("push_chunk: sid=%s - no audio to play, clearing processing_active", sid)
+            else:
+                # No response requested or no transcript - clear processing flag immediately
+                s.processing_active = False
+                logger.info("push_chunk: sid=%s - no response requested, clearing processing_active", sid)
             
-            # Prepare for next segment
+            # Prepare for next segment (processing_active will be cleared after playback if audio exists)
             s.advance_segment()
-            logger.info("push_chunk: sid=%s advanced to segment=%d, ready for next turn", sid, s.segment_index)
+            if s.processing_active:
+                logger.info("push_chunk: sid=%s advanced to segment=%d, processing_active=True (will clear after playback)", sid, s.segment_index)
+            else:
+                logger.info("push_chunk: sid=%s advanced to segment=%d, processing_active=False (ready for new input)", sid, s.segment_index)
             return res
         
         # Still in speech or short silence - keep buffering

@@ -22,27 +22,26 @@ FFMPEG_BIN=path/to/ffmpeg.exe  # Windows
 FFMPEG_BIN=ffmpeg  # Linux/Mac (if in PATH)
 ```
 
-#### Whisper.cpp
-Clone and build [whisper.cpp](https://github.com/ggerganov/whisper.cpp):
+#### Faster-Whisper (ASR)
+The system uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for speech recognition, which provides GPU acceleration and built-in VAD filtering.
 
-```bash
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-mkdir build
-cd build
-cmake ..
-cmake --build . --config Release
-```
-
-Download a Whisper model (e.g., `ggml-base.en.bin`) and place it in the `models/` directory.
-
-Set paths in your `.env` file:
+**Option 1: Use model name (auto-downloads from HuggingFace)**
 ```env
-WHISPER_BIN=path/to/whisper.cpp/build/bin/Release/whisper-cli.exe  # Windows
-# or
-WHISPER_BIN=path/to/whisper.cpp/build/bin/whisper-cli  # Linux/Mac
-WHISPER_MODEL=path/to/models/ggml-base.en.bin
+WHISPER_MODEL=base  # Options: tiny, base, small, medium, large-v3, etc.
 ```
+
+**Option 2: Use local converted model**
+If you have a converted CTranslate2 model, specify the path:
+```env
+WHISPER_MODEL=path/to/whisper-base-ct2
+```
+
+**Note:** `WHISPER_BIN` is no longer required (deprecated). The system will automatically use GPU if available, or fall back to CPU.
+
+**GPU Acceleration:**
+- GPU is auto-detected if CUDA is available
+- Set `USE_CUDA=true` in `.env` to force GPU, or `USE_CUDA=false` to force CPU
+- GPU uses `float16` compute type, CPU uses `int8` for optimal performance
 
 #### Piper TTS (Optional)
 Download a Piper voice model and set the path:
@@ -65,9 +64,12 @@ EXTERNAL_API_BASE_URL=http://localhost:8001
 
 # Voice processing (see above for setup instructions)
 FFMPEG_BIN=ffmpeg
-WHISPER_BIN=whisper.cpp/build/bin/Release/whisper-cli.exe
-WHISPER_MODEL=models/ggml-base.en.bin
+# WHISPER_BIN is deprecated (no longer needed with faster-whisper)
+WHISPER_MODEL=base  # Model name (tiny, base, small, medium, large-v3) or local path
 PIPER_VOICE=models/en_US-lessac-high.onnx
+# Optional: Force GPU/CPU (auto-detected if not set)
+# USE_CUDA=true  # Force GPU
+# USE_CUDA=false  # Force CPU
 ```
 
 Get your API key from [Together AI](https://together.ai/)

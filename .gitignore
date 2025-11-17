@@ -24,6 +24,9 @@ whisper.cpp/
 models/*.bin
 models/*.onnx
 models/*.onnx.json
+# Faster-whisper models (large files, shouldn't be in git)
+models/*-ct2/
+models/whisper-*/
 
 # Test files and temporary audio files
 test.wav

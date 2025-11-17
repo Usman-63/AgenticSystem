@@ -7,26 +7,31 @@ from fastapi.responses import JSONResponse
 import json
 import logging
 import asyncio
-from voice.service.turn_manager import TurnManager
-from voice.service.voice_session import VoiceSessionManager
+from voice.service.shared_session import SESS, TURN
 import os
+from uvicorn.protocols.utils import ClientDisconnected
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.join("storage", "voice")
-os.makedirs(BASE_DIR, exist_ok=True)
-SESS = VoiceSessionManager(BASE_DIR)
-
-# Config
-WHISPER_BIN = os.getenv("WHISPER_BIN", "")
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "")
-PIPER_VOICE = os.getenv("PIPER_VOICE", "")
-FFMPEG_BIN = os.getenv("FFMPEG_BIN", "ffmpeg")
-TURN = TurnManager(BASE_DIR, FFMPEG_BIN, WHISPER_BIN, WHISPER_MODEL, PIPER_VOICE)
-
 # Store active WebRTC connections
 active_connections: dict[str, WebSocket] = {}
+
+async def safe_send_text(websocket: WebSocket, message: dict) -> bool:
+    """
+    Safely send a text message over WebSocket, handling connection errors gracefully.
+    Returns True if sent successfully, False if connection is closed.
+    """
+    try:
+        await websocket.send_text(json.dumps(message))
+        return True
+    except (WebSocketDisconnect, ClientDisconnected, RuntimeError) as e:
+        # Connection is closed or closing, this is expected when client disconnects
+        logger.debug("WebSocket send failed (connection closed): %s", str(e))
+        return False
+    except Exception as e:
+        logger.error("Unexpected error sending WebSocket message: %s", str(e), exc_info=True)
+        return False
 
 @router.websocket("/voice/webrtc/{session_id}")
 async def webrtc_websocket(websocket: WebSocket, session_id: str):
@@ -41,8 +46,14 @@ async def webrtc_websocket(websocket: WebSocket, session_id: str):
     active_connections[session_id] = websocket
     logger.info("WebRTC WebSocket connected: session_id=%s", session_id)
     
-    # Initialize session
+    # Initialize session in both TURN and SESS (ensure they're in sync)
     TURN.start(session_id)
+    # Ensure session exists in SESS as well
+    if not SESS.get(session_id):
+        from voice.service.voice_session import VoiceSession
+        s = VoiceSession(session_id, SESS.base)
+        SESS.sessions[session_id] = s
+        logger.info("webrtc_websocket: created session in SESS for session_id=%s", session_id)
     
     try:
         while True:
@@ -54,11 +65,12 @@ async def webrtc_websocket(websocket: WebSocket, session_id: str):
                 if msg_type == "offer":
                     # WebRTC offer received - for now, we'll use DataChannel directly
                     # In a full WebRTC implementation, you'd handle SDP exchange here
-                    await websocket.send_text(json.dumps({
+                    if not await safe_send_text(websocket, {
                         "type": "answer",
                         "session_id": session_id,
                         "status": "ready"
-                    }))
+                    }):
+                        break  # Connection closed, exit loop
                     logger.info("WebRTC offer received for session_id=%s", session_id)
                 
                 elif msg_type == "audio_chunk":
@@ -77,20 +89,47 @@ async def webrtc_websocket(websocket: WebSocket, session_id: str):
                     }
                     logger.info("webrtc_websocket: sending processing_result: finalized=%s, transcript='%s', reply='%s'", 
                                res.get("finalized"), res.get("transcript", ""), res.get("reply", ""))
-                    await websocket.send_text(json.dumps(response_msg))
+                    if not await safe_send_text(websocket, response_msg):
+                        break  # Connection closed, exit loop
                     
                     # If finalized, send transcript and reply
                     if res.get("finalized"):
-                        if res.get("audio_path"):
-                            # Send audio file path for playback
-                            await websocket.send_text(json.dumps({
+                        if res.get("audio_path") and os.path.exists(res["audio_path"]):
+                            # Ensure session exists and set audio path in shared session
+                            s = SESS.get(session_id)
+                            if not s:
+                                # Session might not exist yet, create it (but this shouldn't happen since TURN.start was called)
+                                logger.warning("webrtc_websocket: session %s not found in SESS, creating it", session_id)
+                                # Note: SESS.start() creates a new session_id, so we can't use it here
+                                # Instead, we'll create the session manually
+                                from voice.service.voice_session import VoiceSession
+                                s = VoiceSession(session_id, SESS.base)
+                                SESS.sessions[session_id] = s
+                            if s:
+                                s.reply_audio_path = res["audio_path"]
+                                logger.info("webrtc_websocket: set reply_audio_path=%s for session_id=%s", res["audio_path"], session_id)
+                            # Only notify client if audio file exists
+                            # Include segment number in path to prevent browser caching old audio
+                            import time
+                            audio_url = f"/api/voice/audio/{session_id}?t={int(time.time() * 1000)}"
+                            if not await safe_send_text(websocket, {
                                 "type": "audio_ready",
-                                "audio_path": f"/api/voice/audio/{session_id}"
-                            }))
+                                "audio_path": audio_url,
+                                "audio_file": res["audio_path"]  # Send actual file path for server lookup
+                            }):
+                                break  # Connection closed, exit loop
+                        else:
+                            logger.warning("Audio path not available or file doesn't exist: %s", res.get("audio_path"))
                 
                 elif msg_type == "ping":
                     # Keep-alive
-                    await websocket.send_text(json.dumps({"type": "pong"}))
+                    if not await safe_send_text(websocket, {"type": "pong"}):
+                        break  # Connection closed, exit loop
+                
+                elif msg_type == "playback_complete":
+                    # Client notifies that playback has finished - clear processing flag
+                    TURN.clear_processing_flag(session_id)
+                    logger.info("webrtc_websocket: playback_complete received for session_id=%s", session_id)
                 
                 else:
                     logger.warning("Unknown message type: %s", msg_type)
@@ -99,10 +138,12 @@ async def webrtc_websocket(websocket: WebSocket, session_id: str):
                 logger.error("Invalid JSON received: %s", data[:100])
             except Exception as e:
                 logger.error("Error processing message: %s", str(e), exc_info=True)
-                await websocket.send_text(json.dumps({
+                # Try to send error, but don't break if connection is closed
+                if not await safe_send_text(websocket, {
                     "type": "error",
                     "error": str(e)
-                }))
+                }):
+                    break  # Connection closed, exit loop
                 
     except WebSocketDisconnect:
         logger.info("WebRTC WebSocket disconnected: session_id=%s", session_id)

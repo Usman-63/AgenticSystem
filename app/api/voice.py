@@ -3,27 +3,23 @@ from fastapi.responses import JSONResponse, FileResponse
 import os
 import uuid
 from typing import Dict
-from voice.service.voice_session import VoiceSessionManager, synth_silence_wav
+from voice.service.voice_session import synth_silence_wav
 from voice.asr.whisper_runner import transcribe_wav
 from voice.tts.piper_runner import synthesize_wav_api
 from voice.vad.silero_runner import get_speech_segments
-from voice.service.turn_manager import TurnManager
+from voice.service.shared_session import SESS, TURN
 from app.services.together_client import call_llm
 import logging
+import os
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.join("storage", "voice")
-os.makedirs(BASE_DIR, exist_ok=True)
-SESS = VoiceSessionManager(BASE_DIR)
-
-# Config (could be moved to configs/voice.json)
+# Config (for local use in this module)
 WHISPER_BIN = os.getenv("WHISPER_BIN", "")
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")  # Default to "base" if not set
 PIPER_VOICE = os.getenv("PIPER_VOICE", "")
 FFMPEG_BIN = os.getenv("FFMPEG_BIN", "ffmpeg")
-TURN = TurnManager(BASE_DIR, FFMPEG_BIN, WHISPER_BIN, WHISPER_MODEL, PIPER_VOICE)
 
 @router.post("/voice/start")
 async def voice_start():
@@ -74,7 +70,12 @@ async def voice_stop(payload: Dict):
     if not s or not s.input_path:
         return JSONResponse({"ok": False, "error": "no input"}, status_code=400)
     logger.info("voice_stop sid=%s input_path=%s", sid, s.input_path)
-    transcript = transcribe_wav(WHISPER_BIN, WHISPER_MODEL, s.input_path) or ""
+    # Get device and compute type from shared session
+    from voice.service.shared_session import USE_CUDA
+    device = "cuda" if USE_CUDA else "cpu"
+    compute_type = "float16" if USE_CUDA else "int8"
+    transcript = transcribe_wav(WHISPER_MODEL, s.input_path, device=device, compute_type=compute_type, 
+                               vad_filter=True, whisper_bin=WHISPER_BIN if WHISPER_BIN else None) or ""
     logger.info("voice_stop transcript_len=%d", len(transcript))
     if not transcript:
         transcript = ""
@@ -89,7 +90,9 @@ async def voice_stop(payload: Dict):
     ok = False
     if PIPER_VOICE:
         logger.info("voice_stop tts start voice=%s out=%s", PIPER_VOICE, out_wav)
-        ok = synthesize_wav_api(PIPER_VOICE, reply, out_wav)
+        # Use the same CUDA detection as shared session
+        from voice.service.shared_session import USE_CUDA
+        ok = synthesize_wav_api(PIPER_VOICE, reply, out_wav, use_cuda=USE_CUDA)
     if not ok:
         synth_silence_wav(out_wav, seconds=0.5)
         logger.info("voice_stop tts failed, synthesized silence out=%s", out_wav)
@@ -102,7 +105,16 @@ async def voice_stop(payload: Dict):
     return JSONResponse({"ok": True, "session_id": sid, "transcript": transcript, "reply": reply, "audio_path": out_wav})
 
 @router.get("/voice/audio/{session_id}")
-async def voice_audio(session_id: str):
+async def voice_audio(session_id: str, audio_file: str = None):
+    """
+    Serve audio file for a session. 
+    If audio_file parameter is provided, use that path directly.
+    Otherwise, use the session's reply_audio_path.
+    """
+    if audio_file and os.path.exists(audio_file):
+        # Direct file path provided (from audio_ready message)
+        return FileResponse(path=audio_file, media_type="audio/wav")
+    
     s = SESS.get(session_id)
     if not s or not s.reply_audio_path or not os.path.exists(s.reply_audio_path):
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -114,7 +126,12 @@ async def voice_asr(payload: Dict):
     s = SESS.get(sid)
     if not s or not s.input_path:
         return JSONResponse({"ok": False, "error": "no input"}, status_code=400)
-    txt = transcribe_wav(WHISPER_BIN, WHISPER_MODEL, s.input_path) or ""
+    # Get device and compute type from shared session
+    from voice.service.shared_session import USE_CUDA
+    device = "cuda" if USE_CUDA else "cpu"
+    compute_type = "float16" if USE_CUDA else "int8"
+    txt = transcribe_wav(WHISPER_MODEL, s.input_path, device=device, compute_type=compute_type,
+                        vad_filter=True, whisper_bin=WHISPER_BIN if WHISPER_BIN else None) or ""
     return JSONResponse({"ok": True, "session_id": sid, "transcript": txt})
 
 @router.post("/voice/vad")

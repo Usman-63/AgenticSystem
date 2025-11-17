@@ -12,6 +12,20 @@ from app.api.webrtc import router as webrtc_router
 app = FastAPI()
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(name)s: %(message)s')
 
+# Log CUDA status after logging is configured
+@app.on_event("startup")
+async def startup_event():
+    from voice.service.shared_session import USE_CUDA
+    logger = logging.getLogger(__name__)
+    if USE_CUDA:
+        logger.info("=" * 60)
+        logger.info("GPU ACCELERATION: ENABLED (CUDA)")
+        logger.info("=" * 60)
+    else:
+        logger.info("=" * 60)
+        logger.info("GPU ACCELERATION: DISABLED (Using CPU)")
+        logger.info("=" * 60)
+
 app.include_router(state_router, prefix="/api")
 app.include_router(rag_router)
 app.include_router(setup_router)
