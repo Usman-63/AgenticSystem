@@ -6,5 +6,12 @@ together
 langchain
 chromadb
 sentence-transformers
+websockets
+httpx
+torch
+torchaudio
+soundfile
+numpy
+pydub
 
 

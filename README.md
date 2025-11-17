@@ -1,6 +1,6 @@
 # Agentic System
 
-A configurable AI assistant system with RAG (Retrieval Augmented Generation) and API calling capabilities.
+A configurable AI assistant system with RAG (Retrieval Augmented Generation), API calling capabilities, and real-time voice interaction via WebSocket.
 
 ## Setup
 
@@ -10,7 +10,47 @@ A configurable AI assistant system with RAG (Retrieval Augmented Generation) and
 pip install -r requirements.txt
 ```
 
-### 2. Environment Variables
+### 2. Install External Tools
+
+#### FFmpeg
+Download and install FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html) or use a pre-built distribution.
+
+Set the path in your `.env` file:
+```env
+FFMPEG_BIN=path/to/ffmpeg.exe  # Windows
+# or
+FFMPEG_BIN=ffmpeg  # Linux/Mac (if in PATH)
+```
+
+#### Whisper.cpp
+Clone and build [whisper.cpp](https://github.com/ggerganov/whisper.cpp):
+
+```bash
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp
+mkdir build
+cd build
+cmake ..
+cmake --build . --config Release
+```
+
+Download a Whisper model (e.g., `ggml-base.en.bin`) and place it in the `models/` directory.
+
+Set paths in your `.env` file:
+```env
+WHISPER_BIN=path/to/whisper.cpp/build/bin/Release/whisper-cli.exe  # Windows
+# or
+WHISPER_BIN=path/to/whisper.cpp/build/bin/whisper-cli  # Linux/Mac
+WHISPER_MODEL=path/to/models/ggml-base.en.bin
+```
+
+#### Piper TTS (Optional)
+Download a Piper voice model and set the path:
+```env
+PIPER_VOICE=path/to/models/en_US-lessac-high.onnx
+```
+
+### 3. Environment Variables
 
 Create a `.env` file in the root directory:
 
@@ -22,6 +62,12 @@ TOGETHER_MODEL=Qwen/QwQ-32B
 EXTERNAL_API_BASE_URL=http://localhost:8001
 # Or use your deployed URL:
 # EXTERNAL_API_BASE_URL=https://your-username-developer-api.hf.space
+
+# Voice processing (see above for setup instructions)
+FFMPEG_BIN=ffmpeg
+WHISPER_BIN=whisper.cpp/build/bin/Release/whisper-cli.exe
+WHISPER_MODEL=models/ggml-base.en.bin
+PIPER_VOICE=models/en_US-lessac-high.onnx
 ```
 
 Get your API key from [Together AI](https://together.ai/)
@@ -66,6 +112,21 @@ The server will start on `http://localhost:8000`
 - **Script-driven conversations**: Define conversation flow via raw script
 - **RAG integration**: Upload documents for knowledge base search
 - **API calling**: Assistant can call defined API endpoints
+- **Real-time voice interaction**: WebSocket-based voice communication with:
+  - Voice Activity Detection (VAD) using Silero VAD
+  - Automatic Speech Recognition (ASR) using Whisper
+  - Text-to-Speech (TTS) using Piper
+  - Buffer-based silence detection for efficient processing
 - **Professional UI**: Multi-step setup wizard and clean chat interface
+
+## Voice Features
+
+The system supports real-time voice conversations:
+
+1. **Voice Activity Detection**: Detects when the user is speaking vs. silent
+2. **Silence-based processing**: Only processes audio when silence is detected (reduces CPU usage)
+3. **In-memory processing**: Efficient audio processing with minimal disk I/O
+4. **Segment archival**: All voice segments are saved with transcripts for debugging
+5. **WebSocket streaming**: Low-latency audio streaming for real-time interaction
 
 

@@ -17,3 +17,23 @@ data/chroma/
 storage/
 *.sqlite3
 logs/
+
+# Large binary files and external dependencies
+ffmpeg-*/
+whisper.cpp/
+models/*.bin
+models/*.onnx
+models/*.onnx.json
+
+# Test files and temporary audio files
+test.wav
+*.wav
+*.webm
+*.mp3
+*.mp4
+
+# IDE and editor files
+.idea/
+*.swp
+*.swo
+*~

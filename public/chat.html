@@ -174,16 +174,41 @@
     <div class="input-area">
       <textarea id="input" placeholder="Type your message..." rows="1"></textarea>
       <button id="send" type="button">Send</button>
+      <button id="start-voice" type="button">Start Voice</button>
+      <button id="stop-voice" type="button" disabled>Stop Voice</button>
+      <label class="checkbox-group"><input type="checkbox" id="voice-respond"> Voice reply on finalize</label>
+      <span id="voice-state">Idle</span>
+      <button id="start-asr" type="button">Start ASR Test</button>
+      <button id="stop-asr" type="button" disabled>Stop ASR Test</button>
+      <button id="vad-test" type="button" disabled>Run VAD on Last</button>
     </div>
+    <div id="asr-result" class="empty-state"></div>
+    <div id="vad-result" class="empty-state"></div>
   </div>
 
   <script>
     const transcriptEl = document.getElementById('transcript');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send');
+    const startVoiceBtn = document.getElementById('start-voice');
+    const stopVoiceBtn = document.getElementById('stop-voice');
+    const startAsrBtn = document.getElementById('start-asr');
+    const stopAsrBtn = document.getElementById('stop-asr');
+    const asrResultEl = document.getElementById('asr-result');
+    const vadBtn = document.getElementById('vad-test');
+    const vadResultEl = document.getElementById('vad-result');
+    const voiceRespondEl = document.getElementById('voice-respond');
+    const voiceStateEl = document.getElementById('voice-state');
     
     let messages = [];
     let turn = 0;
+    let mediaRecorder = null;
+    let sessionId = null;
+    let chunks = [];
+    let asrRecorder = null;
+    let asrSessionId = null;
+    let asrChunks = [];
+    let webrtcWs = null;  // WebRTC WebSocket connection
 
     // Auto-resize textarea
     inputEl.addEventListener('input', function() {
@@ -200,6 +225,11 @@
     });
 
     sendBtn.addEventListener('click', sendMessage);
+    startVoiceBtn.addEventListener('click', startVoice);
+    stopVoiceBtn.addEventListener('click', stopVoice);
+    startAsrBtn.addEventListener('click', startAsr);
+    stopAsrBtn.addEventListener('click', stopAsr);
+    vadBtn.addEventListener('click', runVad);
 
     function render() {
       if (messages.length === 0) {
@@ -294,6 +324,233 @@
     }
 
     checkSetup();
+    
+    async function startVoice() {
+      try {
+        // Start WebRTC session
+        const res = await fetch('/api/voice/webrtc/start', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Failed to start WebRTC session');
+        sessionId = data.session_id;
+        
+        // Connect WebSocket for WebRTC signaling and data
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/voice/webrtc/${sessionId}`;
+        webrtcWs = new WebSocket(wsUrl);
+        
+        webrtcWs.onopen = () => {
+          console.log('WebRTC WebSocket connected');
+          voiceStateEl.textContent = 'Connecting…';
+          
+          // Get audio stream
+          navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            const opts = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
+            mediaRecorder = new MediaRecorder(stream, opts);
+            
+            mediaRecorder.ondataavailable = async (e) => {
+              if (e.data && e.data.size > 0 && webrtcWs && webrtcWs.readyState === WebSocket.OPEN) {
+                // Convert blob to base64 and send via WebSocket
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64 = reader.result.split(',')[1]; // Remove data:audio/webm;base64, prefix
+                  webrtcWs.send(JSON.stringify({
+                    type: 'audio_chunk',
+                    data: base64,
+                    respond: voiceRespondEl.checked
+                  }));
+                };
+                reader.readAsDataURL(e.data);
+              }
+            };
+            
+            mediaRecorder.start(300); // Send chunks every 300ms
+            voiceStateEl.textContent = 'Listening…';
+            startVoiceBtn.disabled = true;
+            stopVoiceBtn.disabled = false;
+          }).catch(err => {
+            console.error('Failed to get audio stream:', err);
+            alert('Failed to access microphone: ' + err.message);
+            webrtcWs.close();
+          });
+        };
+        
+        webrtcWs.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            console.log('WebSocket message received:', msg);
+            
+            if (msg.type === 'processing_result') {
+              if (msg.state) {
+                voiceStateEl.textContent = msg.state === 'recording' ? 'Recording…' : 'Listening…';
+              }
+              
+              if (msg.finalized) {
+                // Silence detected - process the buffered audio
+                console.log('Finalized message:', { transcript: msg.transcript, reply: msg.reply });
+                if (msg.transcript && msg.transcript.trim()) {
+                  messages.push({ role: 'user', content: msg.transcript.trim() });
+                  console.log('Added user message:', msg.transcript.trim());
+                } else {
+                  console.warn('No transcript in finalized message');
+                }
+                if (msg.reply && msg.reply.trim()) {
+                  messages.push({ role: 'assistant', content: msg.reply.trim() });
+                  console.log('Added assistant message:', msg.reply.trim());
+                }
+                render();
+                voiceStateEl.textContent = 'Listening…';
+              }
+            } else if (msg.type === 'audio_ready' && msg.audio_path) {
+              // Play TTS audio response
+              const audio = new Audio(msg.audio_path);
+              audio.play().catch(err => console.error('Audio play failed:', err));
+            } else if (msg.type === 'error') {
+              console.error('WebRTC error:', msg.error);
+              voiceStateEl.textContent = 'Error';
+            }
+          } catch (err) {
+            console.error('Error parsing WebSocket message:', err);
+          }
+        };
+        
+        webrtcWs.onerror = (error) => {
+          console.error('WebRTC WebSocket error:', error);
+          voiceStateEl.textContent = 'Connection Error';
+        };
+        
+        webrtcWs.onclose = () => {
+          console.log('WebRTC WebSocket closed');
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+          }
+          webrtcWs = null;
+        };
+        
+      } catch (e) {
+        alert(e.message);
+        if (webrtcWs) webrtcWs.close();
+      }
+    }
+
+    async function stopVoice() {
+      try {
+        // Stop MediaRecorder
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          await new Promise((resolve) => {
+            mediaRecorder.addEventListener('stop', resolve, { once: true });
+            mediaRecorder.stop();
+          });
+        }
+        
+        // Close WebSocket connection
+        if (webrtcWs) {
+          webrtcWs.close();
+          webrtcWs = null;
+        }
+        
+        // Stop audio tracks
+        if (mediaRecorder && mediaRecorder.stream) {
+          mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (e) {
+        console.error('Error stopping voice:', e);
+      } finally {
+        startVoiceBtn.disabled = false;
+        stopVoiceBtn.disabled = true;
+        mediaRecorder = null;
+        sessionId = null;
+        voiceStateEl.textContent = 'Idle';
+      }
+    }
+
+    async function startAsr() {
+      try {
+        const res = await fetch('/api/voice/start', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Failed to start ASR');
+        asrSessionId = data.session_id;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const opts = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
+        asrRecorder = new MediaRecorder(stream, opts);
+        asrChunks = [];
+        asrRecorder.ondataavailable = (e) => { if (e.data.size > 0) asrChunks.push(e.data); };
+        asrRecorder.start(200);
+        startAsrBtn.disabled = true;
+        stopAsrBtn.disabled = false;
+        asrResultEl.textContent = '';
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function stopAsr() {
+      try {
+        if (asrRecorder) {
+          await new Promise((resolve) => {
+            asrRecorder.addEventListener('stop', resolve, { once: true });
+            asrRecorder.stop();
+          });
+        }
+        const blob = new Blob(asrChunks, { type: 'audio/webm' });
+        const fd = new FormData();
+        fd.append('audio', blob, 'input.webm');
+        const up = await fetch(`/api/voice/upload?session_id=${encodeURIComponent(asrSessionId)}`, { method: 'POST', body: fd });
+        const upData = await up.json();
+        if (!upData.ok) throw new Error('Upload failed');
+        vadBtn.disabled = false;
+        const st = await fetch('/api/voice/asr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: asrSessionId }) });
+        const stData = await st.json();
+        if (stData.ok) {
+          asrResultEl.textContent = stData.transcript || '(no audio recognized)';
+        } else {
+          alert('ASR failed');
+        }
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        startAsrBtn.disabled = false;
+        stopAsrBtn.disabled = true;
+        asrRecorder = null;
+        asrChunks = [];
+      }
+    }
+
+    async function runVad() {
+      try {
+        if (!asrSessionId) {
+          alert('No session');
+          return;
+        }
+        vadResultEl.textContent = 'Processing VAD...';
+        const res = await fetch('/api/voice/vad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: asrSessionId }) });
+        const data = await res.json();
+        console.log('VAD response:', data);
+        if (data.ok) {
+          const segs = data.segments || [];
+          if (segs.length === 0) {
+            vadResultEl.textContent = 'VAD Segments: (none detected)';
+          } else {
+            const lines = ['VAD Segments:'];
+            for (const s of segs) {
+              const start = typeof s.start === 'number' ? s.start : parseFloat(s.start);
+              const end = typeof s.end === 'number' ? s.end : parseFloat(s.end);
+              if (!isNaN(start) && !isNaN(end)) {
+                lines.push(`- ${start.toFixed(2)}s → ${end.toFixed(2)}s (${(end - start).toFixed(2)}s)`);
+              } else {
+                lines.push(`- Invalid segment: ${JSON.stringify(s)}`);
+              }
+            }
+            vadResultEl.textContent = lines.join('\n');
+          }
+        } else {
+          vadResultEl.textContent = `VAD failed: ${data.error || 'Unknown error'}`;
+          alert('VAD failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        vadResultEl.textContent = `Error: ${String(e)}`;
+        alert(String(e));
+      }
+    }
   </script>
 </body>
 </html>

@@ -5,7 +5,6 @@ const inputEl = document.getElementById('input')
 const formEl = document.getElementById('chat-form')
 const systemEl = document.getElementById('system')
 const sendBtn = document.getElementById('send')
-const scriptedEl = document.getElementById('scripted')
 const kbFilesEl = document.getElementById('kb-files')
 const uploadKbBtn = document.getElementById('upload-kb')
 const kbQueryEl = document.getElementById('kb-query')
@@ -41,13 +40,6 @@ function render() {
     div.appendChild(bubble)
     transcriptEl.appendChild(div)
   }
-}
-
-function ensureSystemPrompt() {
-  const sys = systemEl.value.trim()
-  const existing = messages.find((m) => m.role === 'system')
-  if (!existing && sys) messages.unshift({ role: 'system', content: sys })
-  else if (existing && existing.content !== sys) existing.content = sys
 }
 
 async function loadState() {
@@ -178,53 +170,31 @@ formEl.addEventListener('submit', async (e) => {
   const text = inputEl.value.trim()
   if (!text) return
   inputEl.value = ''
-  const useScripted = scriptedEl.checked
-  if (!useScripted) {
-    ensureSystemPrompt()
-    messages.push({ role: 'user', content: text })
-    render()
-  }
+  messages.push({ role: 'user', content: text })
+  render()
   sendBtn.disabled = true
   try {
-    let data
-    if (useScripted) {
-      messages.push({ role: 'user', content: text })
-      render()
-      const res = await fetch(`/api/scripted_chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text, turn, history: messages.slice(-8) }),
-      })
-      data = await res.json()
-      if (data.reply) messages.push({ role: 'assistant', content: data.reply })
-      if (data.kb && Array.isArray(data.kb.sources)) {
-        const lines = ['KB Sources:']
-        for (const s of data.kb.sources) {
-          const score = typeof s.score === 'number' ? s.score.toFixed(4) : s.score
-          lines.push(`${s.source_path || '(unknown)'} (score=${score})`)
-          lines.push((s.preview || '').replace(/\s+/g, ' ').slice(0, 160))
-        }
-        document.getElementById('kb-sources').textContent = lines.join('\n')
+    const res = await fetch(`/api/scripted_chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text, turn, history: messages.slice(-8) }),
+    })
+    const data = await res.json()
+    if (data.reply) messages.push({ role: 'assistant', content: data.reply })
+    if (data.kb && Array.isArray(data.kb.sources)) {
+      const lines = ['KB Sources:']
+      for (const s of data.kb.sources) {
+        const score = typeof s.score === 'number' ? s.score.toFixed(4) : s.score
+        lines.push(`${s.source_path || '(unknown)'} (score=${score})`)
+        lines.push((s.preview || '').replace(/\s+/g, ' ').slice(0, 160))
       }
-      if (data.api) {
-        apiResultEl.textContent = JSON.stringify(data.api, null, 2)
-      }
-      render()
-      turn++
-    } else {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
-      })
-      data = await res.json()
-      if (data && data.reply) {
-        messages.push({ role: 'assistant', content: data.reply })
-        render()
-      } else {
-        alert('No reply')
-      }
+      document.getElementById('kb-sources').textContent = lines.join('\n')
     }
+    if (data.api) {
+      apiResultEl.textContent = JSON.stringify(data.api, null, 2)
+    }
+    render()
+    turn++
   } catch (err) {
     alert(String(err))
   } finally {

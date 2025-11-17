@@ -10,12 +10,14 @@
     {
       "method": "POST",
       "path": "/customer/submit",
-      "description": "Submit the orders"
+      "description": "Submits the custmer order",
+      "payload": {}
     },
     {
       "method": "GET",
       "path": "/customer/{submission_id}",
-      "description": "Get customer Submission"
+      "description": "Returns the customer Order Details",
+      "payload": {}
     }
   ]
 }
