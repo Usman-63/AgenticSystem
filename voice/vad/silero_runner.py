@@ -79,7 +79,14 @@ def get_speech_segments_from_audio(audio_array, sampling_rate: int = 16000,
         if len(audio_array.shape) > 1 and audio_array.shape[1] > 1:
             audio_array = np.mean(audio_array, axis=1)
         
-        logger.debug("Running VAD on in-memory audio, length: %d samples", len(audio_array))
+        logger.info("Running VAD on in-memory audio, length: %d samples (%.2fs), threshold=%.2f", 
+                   len(audio_array), len(audio_array) / sampling_rate, threshold)
+        
+        # Check audio stats
+        audio_max = float(np.max(np.abs(audio_array)))
+        audio_mean = float(np.mean(np.abs(audio_array)))
+        logger.info("Audio stats: max=%.4f, mean=%.4f", audio_max, audio_mean)
+        
         ts = get_speech_timestamps(
             audio_array,
             _vad_model,
@@ -88,7 +95,7 @@ def get_speech_segments_from_audio(audio_array, sampling_rate: int = 16000,
             min_speech_duration_ms=min_speech_ms,
             min_silence_duration_ms=min_silence_ms,
         )
-        logger.debug("VAD detected %d timestamp segments", len(ts) if ts else 0)
+        logger.info("VAD detected %d timestamp segments", len(ts) if ts else 0)
         out: List[Dict] = []
         for t in ts or []:
             start_val = t.get('start', 0) if isinstance(t, dict) else (t.start if hasattr(t, 'start') else 0)

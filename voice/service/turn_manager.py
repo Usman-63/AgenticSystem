@@ -4,10 +4,10 @@ import threading
 import shutil
 import time
 import io
-from typing import Dict, Optional
+import json
+from typing import Dict, Optional, List
 from voice.vad.silero_runner import get_speech_segments_from_audio
 from voice.asr.whisper_runner import transcribe_wav_bytes
-from app.services.together_client import call_llm
 from voice.tts.piper_runner import synthesize_wav_api
 
 class TurnSession:
@@ -27,6 +27,10 @@ class TurnSession:
         self.segment_start_time = time.time()  # Track when segment started
         self.conversion_lock = threading.Lock()  # Prevent concurrent conversions
         self.processing_active: bool = False  # Flag to prevent processing new chunks during processing/playback
+        
+        # Conversation history for scripted_chat
+        self.conversation_history: List[Dict[str, str]] = []
+        self.turn_number: int = 0
         
         # In-memory buffers for processing (files still saved for archival)
         self.webm_buffer = bytearray()  # Accumulate webm chunks in memory
@@ -54,7 +58,16 @@ class TurnSession:
                 # Store first ~8KB as header (enough for EBML header and initial segment info)
                 self.webm_header = bytes(data[:min(8192, len(data))])
                 import logging
-                logging.getLogger(__name__).debug("append_chunk: stored webm header (%d bytes)", len(self.webm_header))
+                logging.getLogger(__name__).info("append_chunk: stored webm header (%d bytes) for segment=%d", 
+                                                 len(self.webm_header), self.segment_index)
+            else:
+                # Log if we don't see the expected header
+                import logging
+                logging.getLogger(__name__).warning("append_chunk: first chunk doesn't have EBML header (first 4 bytes: %02x %02x %02x %02x)", 
+                                                    data[0] if len(data) > 0 else 0,
+                                                    data[1] if len(data) > 1 else 0,
+                                                    data[2] if len(data) > 2 else 0,
+                                                    data[3] if len(data) > 3 else 0)
         
         # In-memory buffer for processing
         self.webm_buffer.extend(data)
@@ -71,16 +84,17 @@ class TurnSession:
             return False
         
         try:
-            # Throttle: don't convert more than once per 0.5 seconds
+            # Throttle: don't convert more than once per 0.3 seconds (reduced from 0.5 for faster response)
             now = time.time()
-            if self.last_conversion_time > 0 and (now - self.last_conversion_time) < 0.5:
+            if self.last_conversion_time > 0 and (now - self.last_conversion_time) < 0.3:
+                logger.debug("convert_to_wav_memory: throttled (%.2fs since last conversion)", now - self.last_conversion_time)
                 return False
             
             # Check if we have enough data in memory
             # WebM files need at least ~5KB for a valid header and initial data
             # After advance_segment(), we reset the buffer, so we need to accumulate enough chunks first
-            if len(self.webm_buffer) < 1000:  # Need at least 1KB of new data
-                logger.debug("convert_to_wav_memory: webm buffer too small: %d bytes (need 1000)", len(self.webm_buffer))
+            if len(self.webm_buffer) < 500:  # Reduced from 1000 to 500 bytes for faster processing
+                logger.debug("convert_to_wav_memory: webm buffer too small: %d bytes (need 500)", len(self.webm_buffer))
                 return False
             
             # Prepare webm data for conversion
@@ -115,8 +129,8 @@ class TurnSession:
                 
                 if res.returncode != 0:
                     stderr_full = res.stderr.decode('utf-8', errors='ignore') if res.stderr else "no stderr"
-                    logger.warning("convert_to_wav_memory: ffmpeg failed rc=%d (0x%X) stderr_len=%d", 
-                                 res.returncode, res.returncode & 0xFFFFFFFF, len(stderr_full))
+                    logger.warning("convert_to_wav_memory: ffmpeg failed rc=%d (0x%X) stderr_len=%d, input_size=%d", 
+                                 res.returncode, res.returncode & 0xFFFFFFFF, len(stderr_full), len(webm_data))
                     if stderr_full:
                         logger.warning("convert_to_wav_memory: stderr (last 500): %s", stderr_full[-500:])
                     return False
@@ -156,8 +170,8 @@ class TurnSession:
                         else:
                             audio = audio.astype(np.float32)
                     self.wav_audio = audio
-                    logger.debug("convert_to_wav_memory: success - wav size=%d bytes, audio samples=%d", 
-                               len(self.wav_bytes), len(audio))
+                    logger.info("convert_to_wav_memory: success - wav size=%d bytes, audio samples=%d, duration=%.2fs, sample_rate=%d", 
+                               len(self.wav_bytes), len(audio), len(audio) / 16000.0, sr)
                 except Exception as e:
                     logger.warning("convert_to_wav_memory: failed to load audio array: %s", str(e))
                     # Continue anyway - we can still use wav_bytes for whisper
@@ -309,19 +323,19 @@ class TurnManager:
                         sid, s.segment_index, s.chunk_count, time_since_last)
             return {"ok": True, "finalized": False, "state": "listening"}
         
-        logger.info("push_chunk: sid=%s segment=%d chunk=%d - checking silence (time_since_last=%.2f)", 
-                    sid, s.segment_index, s.chunk_count, time_since_last)
+        logger.info("push_chunk: sid=%s segment=%d chunk=%d - checking silence (time_since_last=%.2f, buffer_size=%d)", 
+                    sid, s.segment_index, s.chunk_count, time_since_last, len(s.webm_buffer))
         
         # Convert webm to wav in memory
         converted = s.convert_to_wav_memory()
         if not converted:
-            logger.info("push_chunk: sid=%s segment=%d chunk=%d - conversion skipped/failed (will retry)", 
+            logger.debug("push_chunk: sid=%s segment=%d chunk=%d - conversion skipped/failed (will retry)", 
                        sid, s.segment_index, s.chunk_count)
             return {"ok": True, "finalized": False, "state": "listening"}
         
         # Ensure we have audio array for VAD
         if s.wav_audio is None:
-            logger.info("push_chunk: sid=%s segment=%d chunk=%d - audio array not ready", 
+            logger.warning("push_chunk: sid=%s segment=%d chunk=%d - audio array not ready after conversion", 
                        sid, s.segment_index, s.chunk_count)
             return {"ok": True, "finalized": False, "state": "listening"}
         
@@ -337,12 +351,19 @@ class TurnManager:
         s.last_duration = duration
         
         # Run VAD on in-memory audio array
-        logger.debug("push_chunk: sid=%s segment=%d running VAD duration=%.2fs", sid, s.segment_index, duration)
-        segs = get_speech_segments_from_audio(s.wav_audio, sampling_rate=16000, threshold=vad_threshold, min_speech_ms=min_speech_ms, min_silence_ms=min_silence_ms)
+        logger.info("push_chunk: sid=%s segment=%d running VAD duration=%.2fs, audio_samples=%d, threshold=%.2f", 
+                   sid, s.segment_index, duration, len(s.wav_audio), vad_threshold)
+        try:
+            segs = get_speech_segments_from_audio(s.wav_audio, sampling_rate=16000, threshold=vad_threshold, min_speech_ms=min_speech_ms, min_silence_ms=min_silence_ms)
+            logger.info("push_chunk: sid=%s segment=%d VAD returned %d segments", sid, s.segment_index, len(segs) if segs else 0)
+        except Exception as e:
+            logger.error("push_chunk: sid=%s segment=%d VAD call failed: %s", sid, s.segment_index, str(e), exc_info=True)
+            segs = []
         
         if not segs:
             # No speech detected yet - keep listening
-            logger.debug("push_chunk: sid=%s segment=%d - no speech segments detected", sid, s.segment_index)
+            logger.info("push_chunk: sid=%s segment=%d - no speech segments detected (duration=%.2fs, threshold=%.2f, min_speech_ms=%d)", 
+                       sid, s.segment_index, duration, vad_threshold, min_speech_ms)
             return {"ok": True, "finalized": False, "state": "listening"}
         
         # Calculate silence after last speech segment
@@ -355,9 +376,11 @@ class TurnManager:
         # Only process when silence threshold is met (buffer-based approach)
         if silence * 1000 >= min_silence_ms:
             # Silence detected - process the buffered audio
-            # Set processing flag to prevent new chunks from being processed
+            # Set processing flag IMMEDIATELY to prevent new chunks from being processed
+            # This must be set before transcription to prevent race conditions
             s.processing_active = True
-            logger.info("push_chunk: sid=%s SILENCE DETECTED - processing segment=%d (processing_active=True)", sid, s.segment_index)
+            logger.info("push_chunk: sid=%s SILENCE DETECTED - processing segment=%d (processing_active=True, will prevent new chunks)", sid, s.segment_index)
+            
             # Transcribe using in-memory wav bytes (piped to whisper via stdin)
             if s.wav_bytes is None or len(s.wav_bytes) == 0:
                 logger.warning("push_chunk: sid=%s segment=%d - wav_bytes is None or empty, cannot transcribe", sid, s.segment_index)
@@ -378,36 +401,23 @@ class TurnManager:
             res: Dict = {"ok": True, "finalized": True, "transcript": txt, "state": "speaking"}
             logger.info("push_chunk: sid=%s segment=%d - returning finalized result: transcript='%s'", sid, s.segment_index, txt)
             
+            # Note: scripted_chat API call is now handled asynchronously in webrtc.py
+            # This prevents blocking the event loop. We just set processing_active and return.
+            # The actual API call and audio generation happens in _handle_scripted_chat_response()
             if respond and txt:
-                try:
-                    reply = call_llm([{ "role": "user", "content": txt }])
-                except Exception as e:
-                    logger.error("LLM call failed: %s", str(e), exc_info=True)
-                    reply = ""
-                res["reply"] = reply
-                if reply and self.piper_voice:
-                    # Use segment index to make filename unique (prevents browser caching old audio)
-                    out_wav = os.path.join(s.dir, f"reply_segment_{s.segment_index}.wav")
-                    ok = synthesize_wav_api(self.piper_voice, reply, out_wav, use_cuda=self.use_cuda)
-                    if ok:
-                        res["audio_path"] = out_wav
-                        # Estimate playback duration (roughly 150 words per minute, ~0.4s per word)
-                        # Add buffer time for safety
-                        estimated_duration = len(reply.split()) * 0.4 + 1.0
-                        res["playback_duration"] = estimated_duration
-                else:
-                    # No audio to play - clear processing flag immediately
-                    s.processing_active = False
-                    logger.info("push_chunk: sid=%s - no audio to play, clearing processing_active", sid)
+                # Keep processing_active=True - it will be cleared after audio playback completes
+                # or in _handle_scripted_chat_response if no audio is generated
+                logger.info("push_chunk: sid=%s - transcript finalized, response will be handled asynchronously (processing_active=True)", sid)
             else:
                 # No response requested or no transcript - clear processing flag immediately
                 s.processing_active = False
                 logger.info("push_chunk: sid=%s - no response requested, clearing processing_active", sid)
             
-            # Prepare for next segment (processing_active will be cleared after playback if audio exists)
+            # IMPORTANT: Advance segment AFTER setting processing_active
+            # This ensures new chunks go to the new segment, but processing_active prevents them from being processed
             s.advance_segment()
             if s.processing_active:
-                logger.info("push_chunk: sid=%s advanced to segment=%d, processing_active=True (will clear after playback)", sid, s.segment_index)
+                logger.info("push_chunk: sid=%s advanced to segment=%d, processing_active=True (new chunks will be discarded until cleared)", sid, s.segment_index)
             else:
                 logger.info("push_chunk: sid=%s advanced to segment=%d, processing_active=False (ready for new input)", sid, s.segment_index)
             return res

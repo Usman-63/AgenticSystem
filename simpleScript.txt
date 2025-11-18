@@ -24,4 +24,4 @@ Case 1: If the user confirms the details, tell him "Your order has been booked, 
 Case 2: If the user asks to update anything, update that and go back to confirmation part and the followed steps.
 
 Once you have told the customer about the order being booked, submit the order details in the form of the following json, each key should have its respective variable's data that you have been storing all along.
-and tell the user that and their order id
+RETURN THE ORDER ID TO USER AFTER SUBMIT.

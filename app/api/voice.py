@@ -90,9 +90,12 @@ async def voice_stop(payload: Dict):
     ok = False
     if PIPER_VOICE:
         logger.info("voice_stop tts start voice=%s out=%s", PIPER_VOICE, out_wav)
+        # Clean markdown formatting from reply before TTS
+        from app.utils.text_processing import clean_text_for_tts
+        cleaned_reply = clean_text_for_tts(reply)
         # Use the same CUDA detection as shared session
         from voice.service.shared_session import USE_CUDA
-        ok = synthesize_wav_api(PIPER_VOICE, reply, out_wav, use_cuda=USE_CUDA)
+        ok = synthesize_wav_api(PIPER_VOICE, cleaned_reply, out_wav, use_cuda=USE_CUDA)
     if not ok:
         synth_silence_wav(out_wav, seconds=0.5)
         logger.info("voice_stop tts failed, synthesized silence out=%s", out_wav)

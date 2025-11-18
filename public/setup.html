@@ -12,92 +12,183 @@
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       padding: 20px;
+      animation: pageFadeIn 0.5s ease-in;
+    }
+    @keyframes pageFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
     .container {
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
-      background: white;
-      border-radius: 12px;
+      background: rgba(255,255,255,0.95);
+      border-radius: 24px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       overflow: hidden;
+      backdrop-filter: blur(10px);
+      animation: slideUpScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+    }
+    @keyframes slideUpScale {
+      from { 
+        opacity: 0; 
+        transform: translateY(50px) scale(0.9);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
     }
     .header {
-      background: #2563eb;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      padding: 24px;
+      padding: 32px 24px;
       text-align: center;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      animation: slideDown 0.5s ease-out 0.2s both;
+      width: 100%;
+      margin: 0;
+      border-radius: 0;
+      box-sizing: border-box;
+      position: relative;
+      z-index: 1;
+    }
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      right: -1px;
+      bottom: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      z-index: -1;
+      border-radius: 24px 24px 0 0;
+    }
+    @keyframes slideDown {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
     }
     .header h1 {
+      margin: 0 0 8px 0;
+      font-size: 32px;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .header p {
       margin: 0;
-      font-size: 28px;
-      font-weight: 600;
+      font-size: 16px;
+      opacity: 0.95;
     }
     .steps {
       display: flex;
-      background: #f3f4f6;
-      border-bottom: 1px solid #e5e7eb;
+      background: rgba(243,244,246,0.8);
+      border-bottom: 1px solid rgba(229,231,235,0.5);
+      backdrop-filter: blur(10px);
     }
     .step {
       flex: 1;
-      padding: 16px;
+      padding: 20px 16px;
       text-align: center;
       cursor: pointer;
       border-bottom: 3px solid transparent;
-      transition: all 0.3s;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      font-weight: 500;
+      position: relative;
+    }
+    .step:hover {
+      background: rgba(255,255,255,0.5);
+      transform: translateY(-2px);
     }
     .step.active {
-      background: white;
-      border-bottom-color: #2563eb;
+      background: rgba(255,255,255,0.95);
+      border-bottom-color: #667eea;
       font-weight: 600;
+      animation: stepActivate 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes stepActivate {
+      from { transform: scale(0.95); }
+      to { transform: scale(1); }
     }
     .step-number {
       display: inline-block;
-      width: 28px;
-      height: 28px;
-      line-height: 28px;
+      width: 32px;
+      height: 32px;
+      line-height: 32px;
       border-radius: 50%;
-      background: #d1d5db;
+      background: linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%);
       color: white;
-      margin-right: 8px;
-      font-size: 14px;
+      margin-right: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     .step.active .step-number {
-      background: #2563eb;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      transform: scale(1.15) rotate(360deg);
+      animation: numberRotate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes numberRotate {
+      from { transform: scale(1) rotate(0deg); }
+      to { transform: scale(1.15) rotate(360deg); }
     }
     .content {
-      padding: 32px;
+      padding: 40px;
     }
     .step-content {
       display: none;
     }
     .step-content.active {
       display: block;
+      animation: contentSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes contentSlideIn {
+      from { 
+        opacity: 0; 
+        transform: translateX(30px) scale(0.95);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateX(0) scale(1);
+      }
+    }
+    .step-content h2 {
+      margin-top: 0;
+      font-size: 28px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 24px;
     }
     .form-group {
-      margin-bottom: 24px;
+      margin-bottom: 28px;
     }
     label {
       display: block;
       font-weight: 600;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       color: #374151;
+      font-size: 15px;
     }
     input[type="text"],
     input[type="email"],
     textarea,
     select {
       width: 100%;
-      padding: 12px;
+      padding: 14px 16px;
       border: 2px solid #e5e7eb;
-      border-radius: 8px;
-      font-size: 14px;
-      transition: border-color 0.3s;
+      border-radius: 12px;
+      font-size: 15px;
+      transition: all 0.3s;
+      font-family: inherit;
     }
     input:focus,
     textarea:focus,
     select:focus {
       outline: none;
-      border-color: #2563eb;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
     textarea {
       min-height: 120px;
@@ -106,93 +197,156 @@
     }
     .slots-list {
       border: 2px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background: rgba(249,250,251,0.5);
     }
     .slot-item {
       display: grid;
       grid-template-columns: 2fr 1fr auto auto;
       gap: 12px;
       align-items: center;
-      padding: 12px;
-      background: #f9fafb;
-      border-radius: 6px;
+      padding: 16px;
+      background: white;
+      border-radius: 10px;
       margin-bottom: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      transition: all 0.3s;
+    }
+    .slot-item:hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
     }
     .endpoint-item {
       display: grid;
       grid-template-columns: 120px 2fr 3fr auto;
       gap: 12px;
       align-items: center;
-      padding: 12px;
-      background: #f9fafb;
-      border-radius: 6px;
-      margin-bottom: 12px;
+      padding: 16px;
+      background: white;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      animation: itemSlideIn 0.4s ease-out both;
+    }
+    @keyframes itemSlideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .endpoint-item:hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transform: translateY(-2px) scale(1.01);
     }
     .file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px;
-      background: #f9fafb;
-      border-radius: 6px;
-      margin-bottom: 8px;
+      padding: 16px;
+      background: white;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      animation: itemSlideIn 0.4s ease-out both;
+    }
+    .file-item:hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transform: translateY(-2px) scale(1.01);
     }
     button {
-      padding: 12px 24px;
+      padding: 14px 28px;
       border: none;
-      border-radius: 8px;
-      font-size: 14px;
+      border-radius: 12px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .btn-primary {
-      background: #2563eb;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
     }
     .btn-primary:hover {
-      background: #1d4ed8;
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    }
+    .btn-primary:active {
+      transform: translateY(0) scale(0.98);
+      animation: buttonPress 0.2s;
+    }
+    @keyframes buttonPress {
+      0% { transform: scale(1); }
+      50% { transform: scale(0.95); }
+      100% { transform: scale(0.98); }
     }
     .btn-secondary {
-      background: #6b7280;
+      background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
       color: white;
+      box-shadow: 0 4px 12px rgba(107, 114, 128, 0.3);
     }
     .btn-secondary:hover {
-      background: #4b5563;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(107, 114, 128, 0.4);
     }
     .btn-danger {
-      background: #ef4444;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       color: white;
-      padding: 8px 16px;
+      padding: 10px 20px;
+      box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
     }
     .btn-danger:hover {
-      background: #dc2626;
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
     }
     .btn-add {
-      background: #10b981;
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
       color: white;
-      padding: 8px 16px;
+      padding: 12px 24px;
+      box-shadow: 0 4px 12px rgba(17, 153, 142, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-add::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+    .btn-add:hover::before {
+      width: 300px;
+      height: 300px;
     }
     .btn-add:hover {
-      background: #059669;
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 6px 16px rgba(17, 153, 142, 0.4);
     }
     .actions {
       display: flex;
       justify-content: space-between;
-      margin-top: 32px;
-      padding-top: 24px;
-      border-top: 2px solid #e5e7eb;
+      margin-top: 40px;
+      padding-top: 28px;
+      border-top: 2px solid rgba(229,231,235,0.5);
     }
     .example {
-      background: #f3f4f6;
-      border-left: 4px solid #2563eb;
-      padding: 12px;
-      margin-top: 8px;
-      border-radius: 4px;
-      font-size: 13px;
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+      border-left: 4px solid #667eea;
+      padding: 16px;
+      margin-top: 12px;
+      border-radius: 8px;
+      font-size: 14px;
       font-family: monospace;
+      color: #4b5563;
+      line-height: 1.6;
     }
     .checkbox-group {
       display: flex;
@@ -201,13 +355,17 @@
     }
     .review-section {
       margin-bottom: 24px;
-      padding: 16px;
-      background: #f9fafb;
-      border-radius: 8px;
+      padding: 20px;
+      background: rgba(249,250,251,0.5);
+      border-radius: 12px;
+      border: 2px solid rgba(229,231,235,0.5);
     }
     .review-section h3 {
       margin-top: 0;
-      color: #2563eb;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .error {
       color: #ef4444;
@@ -333,7 +491,15 @@
         if (res.ok) {
           const data = await res.json();
           if (data.rag_context && data.rag_context.documents) {
-            uploadedFiles = data.rag_context.documents;
+            // Handle both old format (strings) and new format (objects)
+            uploadedFiles = data.rag_context.documents.map(doc => {
+              if (typeof doc === 'string') {
+                return doc; // Old format
+              } else if (typeof doc === 'object' && doc.filename) {
+                return doc; // New format
+              }
+              return doc; // Fallback
+            });
             renderUploadedFiles();
           }
           
@@ -453,14 +619,14 @@
         const div = document.createElement('div');
         div.className = 'endpoint-item';
         div.innerHTML = `
-          <select onchange="endpoints[${index}].method = this.value">
+          <select onchange="endpoints[${index}].method = this.value" style="padding: 12px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; font-weight: 600;">
             <option value="GET" ${ep.method === 'GET' ? 'selected' : ''}>GET</option>
             <option value="POST" ${ep.method === 'POST' ? 'selected' : ''}>POST</option>
             <option value="PUT" ${ep.method === 'PUT' ? 'selected' : ''}>PUT</option>
             <option value="DELETE" ${ep.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
           </select>
-          <input type="text" placeholder="/api/path" value="${ep.path}" onchange="endpoints[${index}].path = this.value">
-          <input type="text" placeholder="Description" value="${ep.description}" onchange="endpoints[${index}].description = this.value">
+          <input type="text" placeholder="/api/path" value="${escapeHtml(ep.path)}" onchange="endpoints[${index}].path = this.value">
+          <input type="text" placeholder="Description" value="${escapeHtml(ep.description)}" onchange="endpoints[${index}].description = this.value">
           <button class="btn-danger" onclick="removeEndpoint(${index})">Remove</button>
         `;
         container.appendChild(div);
@@ -511,9 +677,25 @@
         });
         const data = await res.json();
         if (data.ok) {
-          uploadedFiles = uploadedFiles.concat(data.files);
+          // Add new files to uploadedFiles array
+          // Handle both old format (strings) and new format (objects)
+          if (data.files && Array.isArray(data.files)) {
+            const existingFilenames = new Set(
+              uploadedFiles.map(f => typeof f === 'string' ? f : f.filename || f)
+            );
+            
+            for (const file of data.files) {
+              const filename = typeof file === 'string' ? file : file.filename || file;
+              if (!existingFilenames.has(filename)) {
+                uploadedFiles.push(file);
+                existingFilenames.add(filename);
+              }
+            }
+          }
           renderUploadedFiles();
-          alert(`Successfully uploaded ${data.files.length} file(s)`);
+          // Clear the file input after successful upload
+          input.value = '';
+          alert(`Successfully uploaded ${data.files?.length || 0} file(s). ${data.chunks_added || 0} chunks added.`);
         } else {
           alert('Upload failed: ' + (data.error || 'Unknown error'));
         }
@@ -525,18 +707,75 @@
     function renderUploadedFiles() {
       const container = document.getElementById('uploaded-files');
       if (uploadedFiles.length === 0) {
-        container.innerHTML = '<p>No files uploaded yet</p>';
+        container.innerHTML = '<p style="color: #6b7280; font-style: italic;">No files uploaded yet</p>';
         return;
       }
-      container.innerHTML = '<h3>Uploaded Files:</h3>';
+      container.innerHTML = '<h3 style="margin-bottom: 12px; color: #111827;">Uploaded Files:</h3>';
       uploadedFiles.forEach((file, index) => {
+        // Handle both old format (string) and new format (object)
+        const filename = typeof file === 'string' ? file : file.filename || file;
+        const docId = typeof file === 'object' ? file.doc_id : null;
+        
         const div = document.createElement('div');
         div.className = 'file-item';
-        div.innerHTML = `<span>${file}</span>`;
+        div.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'font-weight: 500; color: #374151; flex: 1;';
+        nameSpan.textContent = escapeHtml(filename);
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.innerHTML = '×';
+        deleteBtn.style.cssText = 'background: #ef4444; color: white; border: none; border-radius: 4px; width: 28px; height: 28px; cursor: pointer; font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center; margin-left: 12px; transition: background 0.2s;';
+        deleteBtn.onmouseover = () => deleteBtn.style.background = '#dc2626';
+        deleteBtn.onmouseout = () => deleteBtn.style.background = '#ef4444';
+        deleteBtn.onclick = () => deleteFile(filename);
+        
+        div.appendChild(nameSpan);
+        div.appendChild(deleteBtn);
         container.appendChild(div);
       });
     }
 
+    async function deleteFile(filename) {
+      if (!confirm(`Are you sure you want to delete "${filename}"? This will remove all chunks associated with this document.`)) {
+        return;
+      }
+      
+      try {
+        const res = await fetch(`/api/kb/document/${encodeURIComponent(filename)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        
+        if (data.ok) {
+          // Remove from uploadedFiles array
+          uploadedFiles = uploadedFiles.filter(f => {
+            const fname = typeof f === 'string' ? f : f.filename || f;
+            return fname !== filename;
+          });
+          renderUploadedFiles();
+          alert(`Document "${filename}" deleted successfully.`);
+        } else {
+          alert(`Failed to delete document: ${data.error || 'Unknown error'}`);
+        }
+      } catch (e) {
+        alert(`Error deleting document: ${e.message}`);
+      }
+    }
+
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[c]));
+    }
 
     // Initialize
     renderUploadedFiles();
@@ -544,8 +783,4 @@
   </script>
 </body>
 </html>
-
-    function escapeHtml(str) {
-      return str.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-    }
 

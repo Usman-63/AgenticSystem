@@ -2,7 +2,10 @@
   "rag_context": {
     "enabled": true,
     "documents": [
-      "Store Inventory.pdf"
+      {
+        "filename": "Store_Inventory.pdf",
+        "doc_id": "d896524c-36f0-4df0-8f00-afadcbc79868"
+      }
     ],
     "description": "Uploaded knowledge base documents"
   },
@@ -11,7 +14,18 @@
       "method": "POST",
       "path": "/customer/submit",
       "description": "Submits the custmer order",
-      "payload": {}
+      "payload": {
+        "selected_items": [
+          "<should contain all the selected items of the customer>"
+        ],
+        "customer_details": {
+          "first_name": "<customer first name>",
+          "last_name": "<customer last name>",
+          "phone": "<customer phone number>",
+          "email": "<customer email address>",
+          "delivery_address": "<customer home address>"
+        }
+      }
     },
     {
       "method": "GET",
